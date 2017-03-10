@@ -190,6 +190,7 @@ class GreedyTagger(object):
     # instance _AddParam.
     self.input = tf.placeholder(dtype=tf.string)
     self.labels = tf.placeholder(dtype=tf.int32)
+    self.test_input = tf.placeholder(dtype=tf.string)
     with tf.name_scope('params') as self._param_scope:
       self._relu_bias_init = tf.constant_initializer(bias_init)
 
@@ -452,3 +453,32 @@ class GreedyTagger(object):
         train_ops.append(avg_update_op)
       nodes['train_op'] = tf.group(*train_ops, name='train_op')
     return nodes
+
+  def AddEvaluation(self,
+                    batch_size,
+                    evaluation_max_steps=300):
+    """Builds the forward network only without the training operation.
+    Args:
+      task_context: file path from which to read the task context.
+      batch_size: batch size to request from reader op.
+      evaluation_max_steps: max number of parsing actions during evaluation,
+          only used in beam parsing.
+      corpus_name: name of the task input to read parses from.
+    Returns:
+      Dictionary of named eval nodes.
+    """
+    def _AssignTransitionScores():
+      return tf.assign(nodes['transition_scores'],
+                       nodes['logits'], validate_shape=False)
+    def _Pass():
+      return tf.constant(-1.0)
+    unused_evaluation_max_steps = evaluation_max_steps
+    with tf.name_scope('evaluation'):
+      nodes = self.evaluation
+      nodes['transition_scores'] = self._AddVariable(
+          [batch_size, self._num_actions], tf.float32, 'transition_scores',
+          tf.constant_initializer(-1.0))
+      nodes.update(self._BuildNetwork(self.test_input,
+                                      return_average=self._use_averaging))
+    return nodes
+
