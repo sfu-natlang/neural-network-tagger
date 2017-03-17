@@ -1,17 +1,3 @@
-# Copyright 2016 Google Inc. All Rights Reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-# ==============================================================================
 
 """Builds parser models."""
 
@@ -65,7 +51,7 @@ def EmbeddingLookupFeatures(params, sparse_features, allow_weights):
 
 
 class GreedyTagger(object):
-  """Builds a Chen & Manning style greedy neural net parser.
+  """Builds a Chen & Manning style greedy neural net tagger
 
   Builds a graph with an optional reader op connected at one end and
   operations needed to train the network on the other. Supports multiple
@@ -79,22 +65,6 @@ class GreedyTagger(object):
     logits: output of the final layer before computing softmax
   The training network also contains:
     train_op: an op that executes a single training step
-
-  Typical usage:
-
-  parser = graph_builder.GreedyParser(num_actions, num_features,
-                                      num_feature_ids, embedding_sizes,
-                                      hidden_layer_sizes)
-  parser.AddTraining(task_context, batch_size=5)
-  with tf.Session('local') as sess:
-    # This works because the session uses the same default graph as the
-    # GraphBuilder did.
-    sess.run(parser.inits.values())
-    while True:
-      tf_epoch, _ = sess.run([parser.training['epoch'],
-                              parser.training['train_op']])
-      if tf_epoch[0] > 0:
-        break
   """
 
   def __init__(self,
@@ -400,17 +370,14 @@ class GreedyTagger(object):
                   batch_size,
                   learning_rate=0.1,
                   decay_steps=4000,
-                  momentum=0.9,
-                  corpus_name='documents'):
+                  momentum=0.9):
     """Builds a trainer to minimize the cross entropy cost function.
 
     Args:
-      task_context: file path from which to read the task context
       batch_size: batch size to request from reader op
       learning_rate: initial value of the learning rate
       decay_steps: decay learning rate by 0.96 every this many steps
-      momentum: momentum parameter used when training with momentum
-      corpus_name: name of the task input to read parses from
+      momentum: momentum parameter used when training with momentu
 
     Returns:
       Dictionary of named training nodes.
@@ -459,11 +426,9 @@ class GreedyTagger(object):
                     evaluation_max_steps=300):
     """Builds the forward network only without the training operation.
     Args:
-      task_context: file path from which to read the task context.
       batch_size: batch size to request from reader op.
       evaluation_max_steps: max number of parsing actions during evaluation,
           only used in beam parsing.
-      corpus_name: name of the task input to read parses from.
     Returns:
       Dictionary of named eval nodes.
     """

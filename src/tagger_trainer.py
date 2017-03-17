@@ -22,18 +22,18 @@ flags.DEFINE_string('tuning_corpus', 'tuning-corpus', 'Name of the context input
 flags.DEFINE_string('word_embeddings', None, 
                     'Recordio containing pretrained word embeddings, will be '
 'loaded as the first embedding matrix.')
-flags.DEFINE_string('hidden_layer_sizes', '200,200', 'Comma separated list of hidden layer sizes.')
+flags.DEFINE_string('hidden_layer_sizes', '128', 'Comma separated list of hidden layer sizes.')
 flags.DEFINE_integer('batch_size', 32, 'Number of sentences to process in parallel.')
 flags.DEFINE_integer('num_epochs', 10, 'Number of epochs to train for.')
 flags.DEFINE_integer('max_steps', 50, 'Max number of parser steps during a training step.')
 flags.DEFINE_integer('report_every', 100, 'Report cost and training accuracy every this many steps.')
 flags.DEFINE_integer('checkpoint_every', 5000, 'Measure tuning UAS and checkpoint every this many steps.')
-flags.DEFINE_float('learning_rate', 0.1, 'Initial learning rate parameter.')
-flags.DEFINE_integer('decay_steps', 4000,
+flags.DEFINE_float('learning_rate', 0.08, 'Initial learning rate parameter.')
+flags.DEFINE_integer('decay_steps', 3600,
                      'Decay learning rate by 0.96 every this many steps.')
 flags.DEFINE_float('momentum', 0.9,
                    'Momentum parameter for momentum optimizer.')
-flags.DEFINE_string('seed', '0', 'Initialization seed for TF variables.')
+flags.DEFINE_string('seed', '1', 'Initialization seed for TF variables.')
 flags.DEFINE_string('pretrained_params', None,
                     'Path to model from which to load params.')
 flags.DEFINE_string('pretrained_params_names', None,
@@ -43,7 +43,7 @@ flags.DEFINE_float('averaging_decay', 0.9999,
 'averaged parameters, set to 1 to do vanilla averaging.')
 
 
-def Eval(sess, tagger, test_data, num_steps, best_eval_metric):
+def Eval(sess, tagger, test_data, num_steps, best_eval_metric, tagMap):
   """Evaluates a network and checkpoints it to disk.
 
   Args:
@@ -64,15 +64,20 @@ def Eval(sess, tagger, test_data, num_steps, best_eval_metric):
   index = 0
   epochs = 0
   while True:
-    index, epochs, feature_endpoints, gold_tags = loadBatch(32, index, test_data, epochs)
+    index, epochs, feature_endpoints, gold_tags, words = loadBatch(FLAGS.batch_size, index, test_data, epochs)
     tf_eval_metrics = sess.run(tagger.evaluation['logits'], feed_dict={tagger.test_input:feature_endpoints})
-    for i in range(32):
+    for i in range(FLAGS.batch_size):
       best_action = 0
       best_score = float("-inf")
-      for j in range(len(tf_eval_metrics)):
-        if tf_eval_metrics[i][j] > best_score:
-          best_score = tf_eval_metrics[i][j]
-          best_action = j
+      if words[i] == "(":
+        best_action = tagMap.index("-LRB-")
+      elif words[i] == ")":
+        best_action = tagMap.index("-RRB-")
+      else:
+        for j in range(45):
+          if tf_eval_metrics[i][j] > best_score:
+            best_score = tf_eval_metrics[i][j]
+            best_action = j
       if best_action == gold_tags[i]:
         num_correct += 1
       num_tokens += 1
@@ -85,7 +90,7 @@ def Eval(sess, tagger, test_data, num_steps, best_eval_metric):
                'eval metric: %.2f%%', num_tokens, time.time() - t, eval_metric)
   return max(eval_metric, best_eval_metric)
 
-def Train(sess, num_actions, feature_sizes, domain_sizes, embedding_dims, wordMap, tagMap):
+def Train(sess, num_actions, feature_sizes, domain_sizes, embedding_dims, wordMap, tagMap, pMap, sMap, pMap3, sMap3):
   """Builds and trains the network
   Args:
     sess: tensorflow session to use
@@ -101,6 +106,7 @@ def Train(sess, num_actions, feature_sizes, domain_sizes, embedding_dims, wordMa
   config = {}
   config['format'] = 'penn2malt'
   config['train'] = 'wsj_0[2-9][0-9][0-9].mrg.3.pa.gs.tab|wsj_1[0-9][0-9][0-9].mrg.3.pa.gs.tab|wsj_2[0-1][0-9][0-9].mrg.3.pa.gs.tab'
+  #config['train'] = 'wsj_02[0-9][0-9].mrg.3.pa.gs.tab'
   config['test'] = 'wsj_23[0-9][0-9].mrg.3.pa.gs.tab'
   config['data_path'] = '/cs/natlang-user/vivian/penn-wsj-deps'
 
@@ -119,8 +125,8 @@ def Train(sess, num_actions, feature_sizes, domain_sizes, embedding_dims, wordMa
                         seed=int(FLAGS.seed),
                         gate_gradients=True,
                         average_decay=FLAGS.averaging_decay)
-  tagger.AddTraining(32)
-  tagger.AddEvaluation(32)
+  tagger.AddTraining(FLAGS.batch_size)
+  tagger.AddEvaluation(FLAGS.batch_size)
   logging.info('Initializing...')
   num_epochs = 0
   cost_sum = 0.0
@@ -141,12 +147,25 @@ def Train(sess, num_actions, feature_sizes, domain_sizes, embedding_dims, wordMa
       features = []
       word_features = []
       other_features = []
+      prefix_features = []
+      suffix_features = []
+      prefix_features3 = []
+      suffix_features3 = []
       gen_word_features(sent_words, idx, wordMap, word_features)
       gen_other_features(other_features, word)
+      gen_prefix_feature2(sent_words, idx, pMap, prefix_features)
+      gen_suffix_feature2(sent_words, idx, sMap, suffix_features)
+      gen_prefix_feature3(sent_words, idx, pMap3, prefix_features3)
+      gen_suffix_feature3(sent_words, idx, sMap3, suffix_features3)
       features.append(word_features)
       features.append(other_features)
+      features.append(prefix_features)
+      features.append(suffix_features)
+      features.append(prefix_features3)
+      features.append(suffix_features3)
+
       label = tagMap.index(sent_tags[idx])
-      tokens.append(TrainExample(features,label)) 
+      tokens.append(TrainExample(word, features, label)) 
 
   logging.info('Loading the test data...')
   '''
@@ -162,17 +181,30 @@ def Train(sess, num_actions, feature_sizes, domain_sizes, embedding_dims, wordMa
       features = []
       word_features = []
       other_features = []
+      prefix_features = []
+      suffix_features = []
+      prefix_features3 = []
+      suffix_features3 = []
       gen_word_features(sent_words, idx, wordMap, word_features)
       gen_other_features(other_features, word)
+      gen_prefix_feature2(sent_words, idx, pMap, prefix_features)
+      gen_suffix_feature2(sent_words, idx, sMap, suffix_features)
+      gen_prefix_feature3(sent_words, idx, pMap3, prefix_features3)
+      gen_suffix_feature3(sent_words, idx, sMap3, suffix_features3)
       features.append(word_features)
       features.append(other_features)
+      features.append(prefix_features)
+      features.append(suffix_features)
+      features.append(prefix_features3)
+      features.append(suffix_features3)
+
       label = tagMap.index(sent_tags[idx])
-      test_tokens.append(TrainExample(features,label)) 
+      test_tokens.append(TrainExample(word, features,label)) 
 
   index = 0 
   logging.info('Trainning...')
   while num_epochs < 10:
-    index, num_epochs, feature_endpoints, gold_tags = loadBatch(32, index, tokens, num_epochs)
+    index, num_epochs, feature_endpoints, gold_tags, _ = loadBatch(FLAGS.batch_size, index, tokens, num_epochs)
     tf_cost, _ = sess.run([tagger.training['cost'],tagger.training['train_op']], feed_dict={tagger.input:feature_endpoints, tagger.labels:gold_tags})
     cost_sum += tf_cost
     num_steps += 1
@@ -182,7 +214,7 @@ def Train(sess, num_actions, feature_sizes, domain_sizes, embedding_dims, wordMa
                     num_steps, time.time() - t, cost_sum / FLAGS.report_every)
       cost_sum = 0.0
     if num_steps % 5000 == 0:
-      best_eval_metric = Eval(sess, tagger, test_tokens, num_steps, best_eval_metric)
+      best_eval_metric = Eval(sess, tagger, test_tokens, num_steps, best_eval_metric, tagMap)
 
 def readMap(path):
   ret = []
@@ -204,26 +236,41 @@ def loadBatch(batch_size, index, tokens, epochs):
   token_size = len(tokens)
   word_features = []
   other_features = []
+  prefix_features = []
+  suffix_features = []
+  prefix_features3 = []
+  suffix_features3 = []
+  words = []
   for i in range(batch_size):
     if index == token_size:
       index = 0
       epochs += 1
     token = tokens[index]
+    words.append(token.get_word())
     word_features.extend(token.get_features()[0])
     other_features.extend(token.get_features()[1])
+    prefix_features.extend(token.get_features()[2])
+    suffix_features.extend(token.get_features()[3])
+    prefix_features3.extend(token.get_features()[4])
+    suffix_features3.extend(token.get_features()[5])
     tags.append(token.get_label())
-    i += 1
     index += 1
   features.append(','.join(str(e) for e in word_features))
   features.append(','.join(str(e) for e in other_features))      
-
-  return index, epochs, features, tags
+  features.append(','.join(str(e) for e in prefix_features))
+  features.append(','.join(str(e) for e in suffix_features))
+  features.append(','.join(str(e) for e in prefix_features3))
+  features.append(','.join(str(e) for e in suffix_features3))  
+  return index, epochs, features, tags, words
 
 def get_index(word, wordMap):
   if word in wordMap:
     return wordMap.index(word)
   else:
     return 0
+
+def _all_digits(s):
+  return all(char.isdigit() for char in s)
 
 def _contains_digits(s):
   return any(char.isdigit() for char in s)
@@ -237,23 +284,165 @@ def _contains_upper(s):
 def _contains_punc(s):
   return any(char in string.punctuation for char in s)
 
+def gen_prefix_feature3(sent, i, pMap, p_features):
+  if i-4 < 0:
+    p_features.append(1)
+  else:
+    p_features.append(get_index(sent[i-4][:3], pMap))
+
+  if i-3 < 0:
+    p_features.append(1)
+  else:
+    p_features.append(get_index(sent[i-3][:3], pMap))
+
+  if i-2 < 0:
+    p_features.append(1)
+  else:
+    p_features.append(get_index(sent[i-2][:3], pMap))  
+
+  if i-1 < 0:
+    p_features.append(1)
+  else:
+    p_features.append(get_index(sent[i-1][:3], pMap))
+
+  if i+1 >= len(sent):
+    p_features.append(1)
+  else:
+    p_features.append(get_index(sent[i+1][:3], pMap))
+
+  if i+2 >= len(sent):
+    p_features.append(1)
+  else:
+    p_features.append(get_index(sent[i+2][:3], pMap))
+
+  if i+3 >= len(sent):
+    p_features.append(1)
+  else:
+    p_features.append(get_index(sent[i+3][:3], pMap))
+
+  p_features.append(get_index(sent[i][:3], pMap))
+
+def gen_suffix_feature3(sent, i, sMap, s_features):
+  if i-4 < 0:
+    s_features.append(1)
+  else:
+    s_features.append(get_index(sent[i-4][-3:], sMap))
+  if i-3 < 0:
+    s_features.append(1)
+  else:
+    s_features.append(get_index(sent[i-3][-3:], sMap))
+  if i-2 < 0:
+    s_features.append(1)
+  else:
+    s_features.append(get_index(sent[i-2][-3:], sMap))
+  if i-1 < 0:
+    s_features.append(1)
+  else:
+    s_features.append(get_index(sent[i-1][-3:], sMap))
+
+  if i+1 >= len(sent): 
+    s_features.append(1)
+  else:
+    s_features.append(get_index(sent[i+1][-3:], sMap))
+
+  if i+2 >= len(sent): 
+    s_features.append(1)
+  else:
+    s_features.append(get_index(sent[i+2][-3:], sMap))
+
+  if i+3 >= len(sent): 
+    s_features.append(1)
+  else:
+    s_features.append(get_index(sent[i+3][-3:], sMap))
+
+  s_features.append(get_index(sent[i][-3:], sMap))
+
+def gen_prefix_feature2(sent, i, pMap, p_features):
+  if i-4 < 0:
+    p_features.append(1)
+  else:
+    p_features.append(get_index(sent[i-4][:2], pMap))
+
+  if i-3 < 0:
+    p_features.append(1)
+  else:
+    p_features.append(get_index(sent[i-3][:2], pMap))
+
+  if i-2 < 0:
+    p_features.append(1)
+  else:
+    p_features.append(get_index(sent[i-2][:2], pMap))  
+
+  if i-1 < 0:
+    p_features.append(1)
+  else:
+    p_features.append(get_index(sent[i-1][:2], pMap))
+
+  if i+1 >= len(sent):
+    p_features.append(1)
+  else:
+    p_features.append(get_index(sent[i+1][:2], pMap))
+
+  if i+2 >= len(sent):
+    p_features.append(1)
+  else:
+    p_features.append(get_index(sent[i+2][:2], pMap))
+
+  if i+3 >= len(sent):
+    p_features.append(1)
+  else:
+    p_features.append(get_index(sent[i+3][:2], pMap))
+
+  p_features.append(get_index(sent[i][:2], pMap))
+
+def gen_suffix_feature2(sent, i, sMap, s_features):
+  if i-4 < 0:
+    s_features.append(1)
+  else:
+    s_features.append(get_index(sent[i-4][-2:], sMap))
+  if i-3 < 0:
+    s_features.append(1)
+  else:
+    s_features.append(get_index(sent[i-3][-2:], sMap))
+  if i-2 < 0:
+    s_features.append(1)
+  else:
+    s_features.append(get_index(sent[i-2][-2:], sMap))
+  if i-1 < 0:
+    s_features.append(1)
+  else:
+    s_features.append(get_index(sent[i-1][-2:], sMap))
+
+  if i+1 >= len(sent): 
+    s_features.append(1)
+  else:
+    s_features.append(get_index(sent[i+1][-2:], sMap))
+
+  if i+2 >= len(sent): 
+    s_features.append(1)
+  else:
+    s_features.append(get_index(sent[i+2][-2:], sMap))
+
+  if i+3 >= len(sent): 
+    s_features.append(1)
+  else:
+    s_features.append(get_index(sent[i+3][-2:], sMap))
+
+  s_features.append(get_index(sent[i][-2:], sMap))
+
+
 def gen_other_features(other_features, word):
-  if not _contains_digits(word):
+  if _all_digits(word):
+    other_features.append(2)
+  elif _contains_digits(word):
+    other_features.append(1)
+  else:
+    other_features.append(0)
+
+  if not _contains_hyphen(word):
     other_features.append(0)
   else:
     other_features.append(1)
-  if not _contains_hyphen(word):
-    other_features.append(2)
-  else:
-    other_features.append(3)
-  if not _contains_upper(word):
-    other_features.append(4)
-  else:
-    other_features.append(5)
-  if not _contains_punc(word):
-    other_features.append(6)
-  else:
-    other_features.append(7)
 
 def gen_word_features(sent, i, wordMap, word_features):
   if i-4 < 0:
@@ -298,20 +487,40 @@ def main(unused_argv):
   logging.set_verbosity(logging.INFO)
   wordMapPath = "word-map"
   tagMapPath = "tag-map"
+  pMapPath = "prefix-list"
+  sMapPath = "suffix-list"
+  pMapPath3 = "prefix-list3"
+  sMapPath3 = "suffix-list3"
+  pMap = readAffix(pMapPath)
+  sMap = readAffix(sMapPath)
+  pMap3 = readAffix(pMapPath3)
+  sMap3 = readAffix(sMapPath3)
   wordMap = readMap(wordMapPath)
   tagMap = readMap(tagMapPath)
+
   wordMap.insert(0,"-start-")
   wordMap.insert(0,"-end-")
   wordMap.insert(0,"-unknown-")
-  feature_sizes = [8,4]
-  domain_sizes = [39398, 8]
+
+  pMap.insert(0,"-start-")
+  pMap.insert(0,"-unknown-")
+  sMap.insert(0,"-start-")
+  sMap.insert(0,"-unknown-")
+
+  pMap3.insert(0,"-start-")
+  pMap3.insert(0,"-unknown-")
+  sMap3.insert(0,"-start-")
+  sMap3.insert(0,"-unknown-")
+
+  feature_sizes = [8,2,8,8,8,8]
+  domain_sizes = [39398, 3, len(pMap)+2, len(sMap)+2, len(pMap3)+2, len(sMap3)+2]
   num_actions = 45
-  embedding_dims = [64,8]
+  embedding_dims = [64,8,16,16,16,16]
   logging.info('Preparing Lexicon...')
   logging.info(len(wordMap))
   logging.info(len(tagMap))    
   with tf.Session(FLAGS.tf_master) as sess:
-    Train(sess, num_actions, feature_sizes, domain_sizes, embedding_dims, wordMap, tagMap)
+    Train(sess, num_actions, feature_sizes, domain_sizes, embedding_dims, wordMap, tagMap, pMap, sMap, pMap3, sMap3)
 
 if __name__ == '__main__':
   tf.app.run() 
