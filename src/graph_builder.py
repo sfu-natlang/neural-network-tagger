@@ -447,3 +447,24 @@ class GreedyTagger(object):
                                       return_average=self._use_averaging))
     return nodes
 
+  def AddSaver(self, slim_model=False):
+    """Adds ops to save and restore model parameters.
+
+    Args:
+      slim_model: whether only averaged variables are saved.
+
+    Returns:
+      the saver object.
+    """
+    # We have to put the save op in the root scope otherwise running
+    # "save/restore_all" won't find the "save/Const" node it expects.
+    with tf.name_scope(None):
+      variables_to_save = self.params.copy()
+      variables_to_save.update(self.variables)
+      if slim_model:
+        for key in variables_to_save.keys():
+          if not key.endswith('avg_var'):
+            del variables_to_save[key]
+      self.saver = tf.train.Saver(variables_to_save)
+    return self.saver
+

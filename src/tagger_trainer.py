@@ -15,7 +15,7 @@ flags = tf.app.flags
 FLAGS = flags.FLAGS
 
 flags.DEFINE_string('tf_master', '', 'TensorFlow execution engine to connect to.')
-flags.DEFINE_string('output_path', '', 'Top level for output.')
+flags.DEFINE_string('output_path', 'models', 'Top level for output.')
 flags.DEFINE_string('params', '0', 'Unique identifier of parameter grid point.')
 flags.DEFINE_string('training_corpus', 'training-corpus', 'Name of the context input to read training data from.')
 flags.DEFINE_string('tuning_corpus', 'tuning-corpus', 'Name of the context input to read tuning data from.')
@@ -42,6 +42,8 @@ flags.DEFINE_float('averaging_decay', 0.9999,
                    'Decay for exponential moving average when computing'
 'averaged parameters, set to 1 to do vanilla averaging.')
 
+def OutputPath(path):
+  return os.path.join(FLAGS.output_path, path)
 
 def Eval(sess, tagger, test_data, num_steps, best_eval_metric, tagMap):
   """Evaluates a network and checkpoints it to disk.
@@ -88,6 +90,8 @@ def Eval(sess, tagger, test_data, num_steps, best_eval_metric, tagMap):
   eval_metric = 0 if num_tokens == 0 else (100.0 * num_correct / num_tokens)
   logging.info('Number of Tokens: %d, Seconds elapsed in evaluation: %.2f, '
                'eval metric: %.2f%%', num_tokens, time.time() - t, eval_metric)
+  if eval_metric > best_eval_metric:
+    tagger.saver.save(sess, OutputPath('model'))
   return max(eval_metric, best_eval_metric)
 
 def Train(sess, num_actions, feature_sizes, domain_sizes, embedding_dims, wordMap, tagMap, pMap, sMap, pMap3, sMap3):
@@ -107,7 +111,7 @@ def Train(sess, num_actions, feature_sizes, domain_sizes, embedding_dims, wordMa
   config['format'] = 'penn2malt'
   config['train'] = 'wsj_0[2-9][0-9][0-9].mrg.3.pa.gs.tab|wsj_1[0-9][0-9][0-9].mrg.3.pa.gs.tab|wsj_2[0-1][0-9][0-9].mrg.3.pa.gs.tab'
   #config['train'] = 'wsj_02[0-9][0-9].mrg.3.pa.gs.tab'
-  config['test'] = 'wsj_23[0-9][0-9].mrg.3.pa.gs.tab'
+  config['test'] = 'wsj_22[0-9][0-9].mrg.3.pa.gs.tab'
   config['data_path'] = '/cs/natlang-user/vivian/penn-wsj-deps'
 
   trainDataPool = DataPool(data_format  = config['format'],
@@ -127,6 +131,7 @@ def Train(sess, num_actions, feature_sizes, domain_sizes, embedding_dims, wordMa
                         average_decay=FLAGS.averaging_decay)
   tagger.AddTraining(FLAGS.batch_size)
   tagger.AddEvaluation(FLAGS.batch_size)
+  tagger.AddSaver()
   logging.info('Initializing...')
   num_epochs = 0
   cost_sum = 0.0
@@ -259,8 +264,8 @@ def loadBatch(batch_size, index, tokens, epochs):
   features.append(','.join(str(e) for e in other_features))      
   features.append(','.join(str(e) for e in prefix_features))
   features.append(','.join(str(e) for e in suffix_features))
-  features.append(','.join(str(e) for e in prefix_features3))
-  features.append(','.join(str(e) for e in suffix_features3))  
+  #features.append(','.join(str(e) for e in prefix_features3))
+  #features.append(','.join(str(e) for e in suffix_features3))  
   return index, epochs, features, tags, words
 
 def get_index(word, wordMap):
@@ -485,6 +490,9 @@ def gen_word_features(sent, i, wordMap, word_features):
     
 def main(unused_argv):
   logging.set_verbosity(logging.INFO)
+  if not gfile.IsDirectory(OutputPath('')):
+    gfile.MakeDirs(OutputPath(''))
+
   wordMapPath = "word-map"
   tagMapPath = "tag-map"
   pMapPath = "prefix-list"
@@ -512,10 +520,10 @@ def main(unused_argv):
   sMap3.insert(0,"-start-")
   sMap3.insert(0,"-unknown-")
 
-  feature_sizes = [8,2,8,8,8,8]
-  domain_sizes = [39398, 3, len(pMap)+2, len(sMap)+2, len(pMap3)+2, len(sMap3)+2]
+  feature_sizes = [8,2,8,8]
+  domain_sizes = [39398, 3, len(pMap)+2, len(sMap)+2]
   num_actions = 45
-  embedding_dims = [64,8,16,16,16,16]
+  embedding_dims = [64,8,16,16]
   logging.info('Preparing Lexicon...')
   logging.info(len(wordMap))
   logging.info(len(tagMap))    
