@@ -14,6 +14,8 @@ https://github.com/tensorflow/models/tree/a9133ae914b44602c5f26afbbd7dd794ff9c66
 
 Model                                                                                                           | News  | Training Time | Test Time
 --------------------------------------------------------------------------------------------------------------- | :---: | :---: | :-------:
-MLP Tagger (12 CPUs)                                              | 97.20 |  1424.66s | 3.02s
-
-
+SyntaxNet Greedy Model (12 CPUs)                                              | 97.20 |  1424.66s | 3.02s
+GLM | 97.18 | - | -
+NN Tagger | 97.31 | - | -
+NN Tagger with BPE | - | - | -
+ 
