@@ -6,10 +6,8 @@ import string
 from tensorflow.python.platform import gfile
 from tensorflow.python.platform import tf_logging as logging
 from graph_builder import GreedyTagger
-from train_example import TrainExample
-
 import pickle
-from data.data_pool import DataPool
+from data_format import ConllData
 
 flags = tf.app.flags
 FLAGS = flags.FLAGS
@@ -45,7 +43,7 @@ flags.DEFINE_float('averaging_decay', 0.9999,
 def OutputPath(path):
   return os.path.join(FLAGS.output_path, path)
 
-def Eval(sess, tagger, test_data, num_steps, best_eval_metric, tagMap):
+def Eval(sess, tagger, test_data, num_steps, best_eval_metric, wordMap, tagMap, pMap, sMap):
   """Evaluates a network and checkpoints it to disk.
 
   Args:
@@ -65,36 +63,57 @@ def Eval(sess, tagger, test_data, num_steps, best_eval_metric, tagMap):
   num_correct = 0
   index = 0
   epochs = 0
+
+  epochs, sent_batch = loadBatch(FLAGS.batch_size, epochs, test_data)
+  logging.info(epochs)
   while True:
-    index, epochs, feature_endpoints, gold_tags, words = loadBatch(FLAGS.batch_size, index, test_data, epochs)
+    sent_batch, epochs, feature_endpoints, gold_tags, words = get_current_features(sent_batch, epochs, test_data, wordMap, tagMap, pMap, sMap)
     tf_eval_metrics = sess.run(tagger.evaluation['logits'], feed_dict={tagger.test_input:feature_endpoints})
     for i in range(FLAGS.batch_size):
       best_action = 0
       best_score = float("-inf")
-      if words[i] == "(":
-        best_action = tagMap.index("-LRB-")
-      elif words[i] == ")":
-        best_action = tagMap.index("-RRB-")
-      else:
-        for j in range(45):
-          if tf_eval_metrics[i][j] > best_score:
-            best_score = tf_eval_metrics[i][j]
-            best_action = j
-      if best_action == gold_tags[i]:
-        num_correct += 1
-      num_tokens += 1
+      for j in range(45):
+        if tf_eval_metrics[i][j] > best_score:
+          best_score = tf_eval_metrics[i][j]
+          best_action = j
+      sent_batch[i].set_tag(tagMap[best_action])
     if num_epochs is None:
       num_epochs = epochs
-    elif num_epochs < epochs:
+    elif num_epochs < sent_batch[0].get_epoch():
       break
+  #finish tagging the sentences in the batch
+
+  test_data.reset_index()
+  while test_data.has_next_sent():
+    sent = test_data.get_next_sent()
+    gold_tags = sent.get_tag_list()
+    output_tags = sent.get_tag_output()
+    assert len(gold_tags) == len(output_tags)
+    for idx, tag in enumerate(gold_tags):
+      num_tokens += 1
+      if tag == output_tags[idx]:
+        num_correct += 1
+    sent.reset_state()
+
   eval_metric = 0 if num_tokens == 0 else (100.0 * num_correct / num_tokens)
-  logging.info('Number of Tokens: %d, Seconds elapsed in evaluation: %.2f, '
-               'eval metric: %.2f%%', num_tokens, time.time() - t, eval_metric)
+  #logging.info('Number of Tokens: %d, Seconds elapsed in evaluation: %.2f, '
+  #             'eval metric: %.2f%%', num_tokens, time.time() - t, eval_metric)
   if eval_metric > best_eval_metric:
+    logging.info("saving")
     tagger.saver.save(sess, OutputPath('model'))
   return max(eval_metric, best_eval_metric)
 
-def Train(sess, num_actions, feature_sizes, domain_sizes, embedding_dims, wordMap, tagMap, pMap, sMap, pMap3, sMap3):
+def process_seg_sent(sent):
+  output = []
+  for word in sent:
+    if word[-2:] == "@@":
+      output.append(word[:-2])
+    else:
+      output.append(word)
+  return output
+
+
+def Train(sess, num_actions, feature_sizes, domain_sizes, embedding_dims, wordMap, tagMap, pMap, sMap, train_data, dev_data):
   """Builds and trains the network
   Args:
     sess: tensorflow session to use
@@ -107,19 +126,6 @@ def Train(sess, num_actions, feature_sizes, domain_sizes, embedding_dims, wordMa
   hidden_layer_sizes = map(int, FLAGS.hidden_layer_sizes.split(','))
   logging.info('Building training network with parameters: feature_sizes: %s '
   'domain_sizes: %s', str(feature_sizes), str(domain_sizes))
-  config = {}
-  config['format'] = 'penn2malt'
-  config['train'] = 'wsj_0[2-9][0-9][0-9].mrg.3.pa.gs.tab|wsj_1[0-9][0-9][0-9].mrg.3.pa.gs.tab|wsj_2[0-1][0-9][0-9].mrg.3.pa.gs.tab'
-  #config['train'] = 'wsj_02[0-9][0-9].mrg.3.pa.gs.tab'
-  config['test'] = 'wsj_22[0-9][0-9].mrg.3.pa.gs.tab'
-  config['data_path'] = '/cs/natlang-user/vivian/penn-wsj-deps'
-
-  trainDataPool = DataPool(data_format  = config['format'],
-                           data_regex   = config['train'],
-                           data_path    = config['data_path'])
-  testDataPool = DataPool(data_format  = config['format'],
-                           data_regex   = config['test'],
-                           data_path    = config['data_path'])
 
   tagger = GreedyTagger(num_actions, 
                         feature_sizes, 
@@ -137,89 +143,29 @@ def Train(sess, num_actions, feature_sizes, domain_sizes, embedding_dims, wordMa
   cost_sum = 0.0
   num_steps = 0
   best_eval_metric = 0.0
-  sess.run(tagger.inits.values())
-  logging.info('Loading the training data...')
-  '''
-  load the training examples
-  '''
-  tokens = []
-  while trainDataPool.has_next_data():
-    sent = trainDataPool.get_next_data()
-    sent_words = sent.get_word_list()
-    sent_tags = sent.get_pos_list()
-    assert len(sent_words) == len(sent_tags)
-    for idx, word in enumerate(sent_words):
-      features = []
-      word_features = []
-      other_features = []
-      prefix_features = []
-      suffix_features = []
-      prefix_features3 = []
-      suffix_features3 = []
-      gen_word_features(sent_words, idx, wordMap, word_features)
-      gen_other_features(other_features, word)
-      gen_prefix_feature2(sent_words, idx, pMap, prefix_features)
-      gen_suffix_feature2(sent_words, idx, sMap, suffix_features)
-      gen_prefix_feature3(sent_words, idx, pMap3, prefix_features3)
-      gen_suffix_feature3(sent_words, idx, sMap3, suffix_features3)
-      features.append(word_features)
-      features.append(other_features)
-      features.append(prefix_features)
-      features.append(suffix_features)
-      features.append(prefix_features3)
-      features.append(suffix_features3)
-
-      label = tagMap.index(sent_tags[idx])
-      tokens.append(TrainExample(word, features, label)) 
-
-  logging.info('Loading the test data...')
-  '''
-  load the training examples
-  '''
-  test_tokens = []
-  while testDataPool.has_next_data():
-    sent = testDataPool.get_next_data()
-    sent_words = sent.get_word_list()
-    sent_tags = sent.get_pos_list()
-    assert len(sent_words) == len(sent_tags)
-    for idx, word in enumerate(sent_words):
-      features = []
-      word_features = []
-      other_features = []
-      prefix_features = []
-      suffix_features = []
-      prefix_features3 = []
-      suffix_features3 = []
-      gen_word_features(sent_words, idx, wordMap, word_features)
-      gen_other_features(other_features, word)
-      gen_prefix_feature2(sent_words, idx, pMap, prefix_features)
-      gen_suffix_feature2(sent_words, idx, sMap, suffix_features)
-      gen_prefix_feature3(sent_words, idx, pMap3, prefix_features3)
-      gen_suffix_feature3(sent_words, idx, sMap3, suffix_features3)
-      features.append(word_features)
-      features.append(other_features)
-      features.append(prefix_features)
-      features.append(suffix_features)
-      features.append(prefix_features3)
-      features.append(suffix_features3)
-
-      label = tagMap.index(sent_tags[idx])
-      test_tokens.append(TrainExample(word, features,label)) 
-
-  index = 0 
+  index = 0
+  sess.run(tagger.inits.values()) 
   logging.info('Trainning...')
-  while num_epochs < 10:
-    index, num_epochs, feature_endpoints, gold_tags, _ = loadBatch(FLAGS.batch_size, index, tokens, num_epochs)
+
+  num_epochs, sent_batch = loadBatch(FLAGS.batch_size, num_epochs, train_data)
+
+  while True:
+    sent_batch, num_epochs, feature_endpoints, gold_tags, _ = get_current_features(sent_batch, num_epochs, train_data, wordMap, tagMap, pMap, sMap)
     tf_cost, _ = sess.run([tagger.training['cost'],tagger.training['train_op']], feed_dict={tagger.input:feature_endpoints, tagger.labels:gold_tags})
     cost_sum += tf_cost
     num_steps += 1
+
     if num_steps % FLAGS.report_every == 0:
       logging.info('Epochs: %d, num steps: %d, '
                    'seconds elapsed: %.2f, avg cost: %.2f, ', num_epochs,
                     num_steps, time.time() - t, cost_sum / FLAGS.report_every)
       cost_sum = 0.0
+
     if num_steps % 5000 == 0:
-      best_eval_metric = Eval(sess, tagger, test_tokens, num_steps, best_eval_metric, tagMap)
+      best_eval_metric = Eval(sess, tagger, dev_data, num_steps, best_eval_metric, wordMap, tagMap, pMap, sMap)
+
+    if num_epochs >= FLAGS.num_epochs:
+      break
 
 def readMap(path):
   ret = []
@@ -235,38 +181,69 @@ def readAffix(path):
     ret = pickle.load(f)
   return ret
 
-def loadBatch(batch_size, index, tokens, epochs):
+def get_current_features(sent_batch, num_epochs, data, wordMap, tagMap, pMap, sMap):
+  batch_size = len(sent_batch)
+  new_sent_batch = [sent for sent in sent_batch if sent.has_next_state()]
+  for sent in sent_batch:
+    if not sent.has_next_state():
+      sent.reset_state()
+
+  while len(new_sent_batch) < batch_size:
+    sent, num_epochs = advance_sent(num_epochs, data)
+    new_sent_batch.append(sent)
+
   features = []
   tags = []
-  token_size = len(tokens)
+  words = []
   word_features = []
   other_features = []
   prefix_features = []
   suffix_features = []
-  prefix_features3 = []
-  suffix_features3 = []
-  words = []
-  for i in range(batch_size):
-    if index == token_size:
-      index = 0
-      epochs += 1
-    token = tokens[index]
-    words.append(token.get_word())
-    word_features.extend(token.get_features()[0])
-    other_features.extend(token.get_features()[1])
-    prefix_features.extend(token.get_features()[2])
-    suffix_features.extend(token.get_features()[3])
-    prefix_features3.extend(token.get_features()[4])
-    suffix_features3.extend(token.get_features()[5])
-    tags.append(token.get_label())
-    index += 1
+
+  for sent in new_sent_batch:
+    word_list = sent.get_word_list()
+    tag_list = sent.get_tag_list()
+    state = sent.get_next_state()
+    word = word_list[state]
+    tag = get_index(tag_list[state], tagMap)
+    words.append(word)
+    tags.append(tag)
+    gen_word_features(word_list, state, wordMap, word_features)
+    gen_other_features(other_features, word)
+    gen_prefix_feature2(word_list, state, pMap, prefix_features)
+    gen_suffix_feature2(word_list, state, sMap, suffix_features)
+
   features.append(','.join(str(e) for e in word_features))
   features.append(','.join(str(e) for e in other_features))      
   features.append(','.join(str(e) for e in prefix_features))
   features.append(','.join(str(e) for e in suffix_features))
   #features.append(','.join(str(e) for e in prefix_features3))
-  #features.append(','.join(str(e) for e in suffix_features3))  
-  return index, epochs, features, tags, words
+  #features.append(','.join(str(e) for e in suffix_features3)) 
+  return new_sent_batch, num_epochs, features, tags, words
+
+
+
+def advance_sent(num_epochs, data):
+  if not data.has_next_sent():
+    data.reset_index()
+    num_epochs += 1
+  sent = data.get_next_sent()
+  sent.set_epoch(num_epochs)
+  return sent, num_epochs
+
+def loadBatch(batch_size, num_epochs, data):
+  size = data.get_sent_num()
+  sent_batch = []
+  for i in range(batch_size):
+    if not data.has_next_sent():
+      data.reset_index()
+      num_epochs += 1
+      logging.info("!!!")
+    sent = data.get_next_sent()
+    sent.set_epoch(num_epochs)
+    sent_batch.append(sent)
+    
+  return num_epochs, sent_batch
 
 def get_index(word, wordMap):
   if word in wordMap:
@@ -492,15 +469,16 @@ def main(unused_argv):
   logging.set_verbosity(logging.INFO)
   if not gfile.IsDirectory(OutputPath('')):
     gfile.MakeDirs(OutputPath(''))
-
+  #bpe = BPE(codecs.open("code-file", encoding='utf-8'), "@@")
   wordMapPath = "word-map"
   tagMapPath = "tag-map"
-  pMapPath = "prefix-list"
-  sMapPath = "suffix-list"
+  pMapPath2 = "prefix-list"
+  sMapPath2 = "suffix-list"
   pMapPath3 = "prefix-list3"
   sMapPath3 = "suffix-list3"
-  pMap = readAffix(pMapPath)
-  sMap = readAffix(sMapPath)
+
+  pMap2 = readAffix(pMapPath2)
+  sMap2 = readAffix(sMapPath2)
   pMap3 = readAffix(pMapPath3)
   sMap3 = readAffix(sMapPath3)
   wordMap = readMap(wordMapPath)
@@ -510,25 +488,30 @@ def main(unused_argv):
   wordMap.insert(0,"-end-")
   wordMap.insert(0,"-unknown-")
 
-  pMap.insert(0,"-start-")
-  pMap.insert(0,"-unknown-")
-  sMap.insert(0,"-start-")
-  sMap.insert(0,"-unknown-")
+  pMap2.insert(0,"-start-")
+  pMap2.insert(0,"-unknown-")
+  sMap2.insert(0,"-start-")
+  sMap2.insert(0,"-unknown-")
 
   pMap3.insert(0,"-start-")
   pMap3.insert(0,"-unknown-")
   sMap3.insert(0,"-start-")
   sMap3.insert(0,"-unknown-")
 
-  feature_sizes = [8,2,8,8]
-  domain_sizes = [39398, 3, len(pMap)+2, len(sMap)+2]
+
+  feature_sizes = [8,2,8,8] #num of features for each feature group: words, other, prefix_2, suffix_2
+  domain_sizes = [len(wordMap)+3, 3, len(pMap2)+2, len(sMap2)+2]
   num_actions = 45
   embedding_dims = [64,8,16,16]
-  logging.info('Preparing Lexicon...')
-  logging.info(len(wordMap))
-  logging.info(len(tagMap))    
+
+  train_data_path = '/cs/natlang-user/vivian/wsj-conll/train.conllu'
+  dev_data_path = '/cs/natlang-user/vivian/wsj-conll/dev.conllu'
+
+  train_data = ConllData(train_data_path)
+  dev_data = ConllData(dev_data_path)
+
   with tf.Session(FLAGS.tf_master) as sess:
-    Train(sess, num_actions, feature_sizes, domain_sizes, embedding_dims, wordMap, tagMap, pMap, sMap, pMap3, sMap3)
+    Train(sess, num_actions, feature_sizes, domain_sizes, embedding_dims, wordMap, tagMap, pMap2, sMap2, train_data, dev_data)
 
 if __name__ == '__main__':
   tf.app.run() 
