@@ -63,7 +63,7 @@ def Eval(sess, tagger, test_data, num_steps, best_eval_metric, wordMap, tagMap, 
   num_correct = 0
   index = 0
   epochs = 0
-
+  test_data.reset_index()
   epochs, sent_batch = loadBatch(FLAGS.batch_size, epochs, test_data)
   logging.info(epochs)
   while True:
@@ -81,7 +81,6 @@ def Eval(sess, tagger, test_data, num_steps, best_eval_metric, wordMap, tagMap, 
       num_epochs = epochs
     elif num_epochs < sent_batch[0].get_epoch():
       break
-  #finish tagging the sentences in the batch
 
   test_data.reset_index()
   while test_data.has_next_sent():
@@ -96,8 +95,8 @@ def Eval(sess, tagger, test_data, num_steps, best_eval_metric, wordMap, tagMap, 
     sent.reset_state()
 
   eval_metric = 0 if num_tokens == 0 else (100.0 * num_correct / num_tokens)
-  #logging.info('Number of Tokens: %d, Seconds elapsed in evaluation: %.2f, '
-  #             'eval metric: %.2f%%', num_tokens, time.time() - t, eval_metric)
+  logging.info('Number of Tokens: %d, Seconds elapsed in evaluation: %.2f, '
+               'eval metric: %.2f%%', num_tokens, time.time() - t, eval_metric)
   if eval_metric > best_eval_metric:
     logging.info("saving")
     tagger.saver.save(sess, OutputPath('model'))
@@ -154,13 +153,13 @@ def Train(sess, num_actions, feature_sizes, domain_sizes, embedding_dims, wordMa
     tf_cost, _ = sess.run([tagger.training['cost'],tagger.training['train_op']], feed_dict={tagger.input:feature_endpoints, tagger.labels:gold_tags})
     cost_sum += tf_cost
     num_steps += 1
-
+    '''
     if num_steps % FLAGS.report_every == 0:
       logging.info('Epochs: %d, num steps: %d, '
                    'seconds elapsed: %.2f, avg cost: %.2f, ', num_epochs,
                     num_steps, time.time() - t, cost_sum / FLAGS.report_every)
       cost_sum = 0.0
-
+    '''
     if num_steps % 5000 == 0:
       best_eval_metric = Eval(sess, tagger, dev_data, num_steps, best_eval_metric, wordMap, tagMap, pMap, sMap)
 
