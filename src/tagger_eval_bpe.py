@@ -32,6 +32,54 @@ flags.DEFINE_integer('max_steps', 1000, 'Max number of steps to take.')
 flags.DEFINE_bool('slim_model', False,
                   'Whether to expect only averaged variables.')
 
+def find_tag(tag_list):
+  ret = 0
+  count = 1
+  index = 1
+  while index < len(tag_list):
+    if tag_list[index] == tag_list[ret]:
+      count += 1
+    else:
+      count -= 1
+
+    if count == 0:
+      ret = index
+      count = 1
+    index += 1
+  return tag_list[ret]
+
+def find_word(word_list):
+  ret = []
+  wlen = len(word_list)-1
+  for index, word in enumerate(word_list):
+    if index == wlen:
+      ret.append(word)
+    else:
+      ret.append(word[:-2])
+  return "".join(ret)
+
+def combine_seg(word_input, tag_input):
+  word_output = []
+  tag_output = []
+  start = 0
+  while start < len(word_input):
+    end = start
+    while(word_input[end][-2:] == "@@"):
+      end += 1
+    word_output.append(find_word(word_input[start : end+1]))
+    tag_output.append(find_tag(tag_input[start : end+1]))
+    start = end + 1
+  return word_output, tag_output
+  
+def process_seg_sent(sent):
+  output = []
+  for word in sent:
+    if word[-2:] == "@@":
+      output.append(word[:-2])
+    else:
+      output.append(word)
+  return output
+
 def OutputPath(path):
   return os.path.join(FLAGS.output_path, path)
 
@@ -72,8 +120,6 @@ def get_current_features(sent_batch, num_epochs, data, wordMap, tagMap, pMap, sM
   cap_features = []
   word_features = []
   other_features = []
-  prefix_features = []
-  suffix_features = []
   tag_features = []
 
   for sent in new_sent_batch:
@@ -87,14 +133,10 @@ def get_current_features(sent_batch, num_epochs, data, wordMap, tagMap, pMap, sM
     cap_features.extend(sent.cap_features[state])
     word_features.extend(sent.word_features[state])
     other_features.extend(sent.other_features[state])
-    prefix_features.extend(sent.prefix_features[state])
-    suffix_features.extend(sent.suffix_features[state])
     tag_features.extend(sent.gen_tag_features(state))
   features.append(','.join(str(e) for e in cap_features))
   features.append(','.join(str(e) for e in word_features))
   features.append(','.join(str(e) for e in other_features))      
-  features.append(','.join(str(e) for e in prefix_features))
-  features.append(','.join(str(e) for e in suffix_features))
   features.append(','.join(str(e) for e in tag_features))
   return new_sent_batch, num_epochs, features, tags, words
 
@@ -122,7 +164,7 @@ def loadBatch(batch_size, num_epochs, data):
 def Eval(sess):
   """Builds and evaluates a network."""
   logging.set_verbosity(logging.INFO)
-  #bpe = BPE(codecs.open("code-file", encoding='utf-8'), "@@")
+  bpe = BPE(codecs.open("code-file", encoding='utf-8'), "@@")
   wordMapPath = "word-map"
   tagMapPath = "tag-map"
   pMapPath = "prefix-list"
@@ -130,8 +172,11 @@ def Eval(sess):
 
   pMap = readAffix(pMapPath)
   sMap = readAffix(sMapPath)
+
   wordMap = readMap(wordMapPath)
   tagMap = readMap(tagMapPath)
+  wordMap, _ = bpe.segment(wordMap)
+  wordMap = list(set(process_seg_sent(wordMap)))
 
   wordMap.insert(0,"-start-")
   wordMap.insert(0,"-end-")
@@ -142,10 +187,10 @@ def Eval(sess):
   sMap.insert(0,"-start-")
   sMap.insert(0,"-unknown-")
 
-  feature_sizes = [8,8,2,8,8,4] #num of features for each feature group: capitalization, words, other, prefix_2, suffix_2, previous_tags
-  domain_sizes = [3, len(wordMap)+3, 3, len(pMap)+2, len(sMap)+2, len(tagMap)+1]
+  feature_sizes = [8,8,2,4] #num of features for each feature group: capitalization, words, other, prefix_2, suffix_2, previous_tags
+  domain_sizes = [3, len(wordMap)+3, 3, len(tagMap)+1]
   num_actions = 45
-  embedding_dims = [8,64,8,16,16,16]
+  embedding_dims = [8,64,8,16]
 
   t = time.time()
   hidden_layer_sizes = map(int, FLAGS.hidden_layer_sizes.split(','))
@@ -154,7 +199,7 @@ def Eval(sess):
   
   test_data_path = '/cs/natlang-user/vivian/wsj-conll/test.conllu'
   logging.info("loading data and precomputing features...")
-  test_data = ConllData(test_data_path, wordMap, tagMap, pMap, sMap)
+  test_data = ConllData(test_data_path, wordMap, tagMap, pMap, sMap, bpe)
 
   tagger = GreedyTagger(num_actions, 
                         feature_sizes, 
@@ -195,9 +240,9 @@ def Eval(sess):
   test_data.reset_index()
   while test_data.has_next_sent():
     sent = test_data.get_next_sent()
-    gold_tags = sent.get_tag_list()
     output_tags = sent.get_tag_output()
-    assert len(gold_tags) == len(output_tags)
+    gold_tags = sent.origin_tag_list
+    word_list, output_tags = combine_seg(sent.seg_word_list, output_tags)
     for idx, tag in enumerate(gold_tags):
       num_tokens += 1
       if tag == output_tags[idx]:

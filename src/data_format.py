@@ -1,7 +1,22 @@
 from sentence import Sentence
+import pickle
+
+def readMap(path):
+  ret = []
+  with open(path, 'rb') as f:
+    for idx, line in enumerate(f):
+      if idx == 0:
+        continue
+      ret.append(line.split()[0])
+  return ret
+
+def readAffix(path):
+  with open(path, 'rb') as f:
+    ret = pickle.load(f)
+  return ret
 
 class ConllData():
-  def __init__(self, data_path=''):
+  def __init__(self, data_path='', word_map=None, tag_map=None, pre_map=None, suf_map=None, bpe=None):
     self.format_list = ["ID",
                         "FORM",
                         "LEMMA",
@@ -14,10 +29,10 @@ class ConllData():
                         "DEPREL"]
     self.comment_sign = ""
     self.sentence_list = []
-    self._get_sentence_list(data_path)
+    self._get_sentence_list(data_path, word_map, tag_map, pre_map, suf_map, bpe)
     self.index = -1
 
-  def _get_sentence_list(self, data_path):
+  def _get_sentence_list(self, data_path, word_map, tag_map, pre_map, suf_map, bpe):
     format_len = len(self.format_list)
     column_list = {}
     for field in self.format_list:
@@ -31,7 +46,7 @@ class ConllData():
             column_list[self.format_list[i]].append(str(entity[i].encode('utf-8')))
         else:
           if column_list[self.format_list[0]] != []:
-            self.sentence_list.append(Sentence(column_list, self.format_list))
+            self.sentence_list.append(Sentence(column_list, self.format_list, word_map, tag_map, pre_map, suf_map, bpe))
           column_list = {}
           for field in self.format_list:
             column_list[field] = []
@@ -56,8 +71,27 @@ class ConllData():
     self.index = -1
 
 if __name__ == '__main__':
-  data_path = "test.conllu"
-  conllData = ConllData(data_path)
+  wordMapPath = "word-map"
+  tagMapPath = "tag-map"
+  pMapPath2 = "prefix-list"
+  sMapPath2 = "suffix-list"
+  pMap2 = readAffix(pMapPath2)
+  sMap2 = readAffix(sMapPath2)
+
+  wordMap = readMap(wordMapPath)
+  tagMap = readMap(tagMapPath)
+
+  wordMap.insert(0,"-start-")
+  wordMap.insert(0,"-end-")
+  wordMap.insert(0,"-unknown-")
+
+  pMap2.insert(0,"-start-")
+  pMap2.insert(0,"-unknown-")
+  sMap2.insert(0,"-start-")
+  sMap2.insert(0,"-unknown-")
+
+  data_path = "/cs/natlang-user/vivian/wsj-conll/test.conllu"
+  conllData = ConllData(data_path, wordMap, tagMap, pMap2, sMap2)
   print conllData.get_sent_num()
 
 
