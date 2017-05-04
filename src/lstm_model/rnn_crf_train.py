@@ -4,7 +4,7 @@ import utils
 import time, os
 from data_format import ConllData
 from collections import defaultdict, namedtuple
-from rnn_crf_model import EntityLSTM
+from rnn_crf_model import LSTM_CRF_Model
 from tensorflow.python.platform import gfile
 
 
@@ -46,7 +46,7 @@ def main():
   tagMap = readMap(tagMapPath)
 
   wordMap.append("-unknown-")
-  wordMap.insert(0,"-padding-")
+  #wordMap.insert(0,"-padding-")
 
   loading_time = time.time()
   train_data_path = '/cs/natlang-user/vivian/wsj-conll/train.conllu'
@@ -62,10 +62,10 @@ def main():
 
   sess = tf.Session()
   with sess.as_default():
-    model = EntityLSTM(dataset, parameters)
+    model = LSTM_CRF_Model(dataset, parameters)
     sess.run(tf.global_variables_initializer())
     epoch_num = 0
-    start = time.time()
+    #start = time.time()
     while True:
       step = 0
       epoch_num += 1
@@ -83,42 +83,42 @@ def main():
         _, _, loss, accuracy, transition_params_trained = sess.run(
                     [model.train_op, model.global_step, model.loss, model.accuracy, model.transition_parameters],
                     feed_dict)
-        if step % 10 == 0:
-          logging.info('Training %.2f%% done', (100.0*step/train_data.get_sent_num()))
 
       train_data.reset_index()
+      total_token_num = 0
+      correct_token_num = 0
+
+      start = time.time()
+      while dev_data.has_next_sent():
+        sent = dev_data.get_next_sent()
+        feed_dict = {
+          model.input_token_indices: sent.wordid_list,
+          model.input_label_indices_vector: sent.label_vector,
+          model.input_token_character_indices: utils.pad_lists(sent.char_list),
+          model.input_token_lengths: sent.word_length,
+          model.input_label_indices_flat: sent.tagid_list,
+          model.dropout_keep_prob: 1
+        }
+        unary_scores, predictions = sess.run([model.unary_scores, model.predictions], feed_dict)
+        if parameters['use_crf']:
+            predictions, _ = tf.contrib.crf.viterbi_decode(unary_scores, transition_params_trained)
+            predictions = predictions[1:-1]
+        else:
+            predictions = predictions.tolist()
+        gold_labels = sent.tagid_list
+        assert(len(predictions) == len(gold_labels))
+        total_token_num += len(predictions)
+        for idx, p in enumerate(predictions):
+          if p == gold_labels[idx]:
+            correct_token_num += 1
+      dev_data.reset_index()
+
+      logging.info('epoch: %d, token number is %d, accuracy is %.2f%%, time is %.2f', epoch_num, total_token_num, (100.0*correct_token_num/total_token_num), time.time()-start)
       if epoch_num >= parameters['maximum_number_of_epochs']: 
         break
-    logging.info("finished training, time is %.2f", time.time()-start)
+    #logging.info("finished training, time is %.2f", time.time()-start)
     model_saver = tf.train.Saver(max_to_keep=parameters['maximum_number_of_epochs'])
     model_saver.save(sess, OutputPath('model_{0:05d}.ckpt'.format(epoch_num)))
-    total_token_num = 0
-    correct_token_num = 0
-    start = time.time()
-    while dev_data.has_next_sent():
-      sent = dev_data.get_next_sent()
-      feed_dict = {
-        model.input_token_indices: sent.wordid_list,
-        model.input_label_indices_vector: sent.label_vector,
-        model.input_token_character_indices: utils.pad_lists(sent.char_list),
-        model.input_token_lengths: sent.word_length,
-        model.input_label_indices_flat: sent.tagid_list,
-        model.dropout_keep_prob: 1
-      }
-      unary_scores, predictions = sess.run([model.unary_scores, model.predictions], feed_dict)
-      if parameters['use_crf']:
-          predictions, _ = tf.contrib.crf.viterbi_decode(unary_scores, transition_params_trained)
-          predictions = predictions[1:-1]
-      else:
-          predictions = predictions.tolist()
-      gold_labels = sent.tagid_list
-      assert(len(predictions) == len(gold_labels))
-      total_token_num += len(predictions)
-      for idx, p in enumerate(predictions):
-        if p == gold_labels[idx]:
-          correct_token_num += 1
-    dev_data.reset_index()
-    logging.info('token number is %d, accuracy is %.2f%%, time is %.2f', total_token_num, (100.0*correct_token_num/total_token_num), time.time()-start)
 
 if __name__ == '__main__':
   main()
