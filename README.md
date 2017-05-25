@@ -2,7 +2,7 @@
 A General Purpose Tagger for POS Tagging, NER Tagging, and Chunking.
 
 
-Syntaxnet
+<h1>Syntaxnet</h1>
 
 1. Prepare WSJ Data for Part-OF-Speech Tagging
 a. convert to conll format 
@@ -13,19 +13,25 @@ b. map XPOSTAG to UPOSTAG before training using convert.py
 https://github.com/tensorflow/models/tree/a9133ae914b44602c5f26afbbd7dd794ff9c6637/syntaxnet
 3. Train and test the model using taggerTrain.sh, taggerTest.sh and tagger.pbtxt
 
-FeedForward Model
+<h1>FeedForward Model</h1>
 
 cd PATH_TO_TAGGER/src/feedforward_model
+
 Training: python tagger_trainer.py 
+
 Evaluating: python tagger_eval.py
 
-Bi-LSTM-CRF Model
+<h1>Bi-LSTM-CRF Model</h1>
+
 cd PATH_TO_TAGGER/src/lstm_crf_model
+
 POS Training: python lstm_char_train.py
+
 NER Training: python ner_train.py
+
 NER Eval: perl conlleval.pl < ner_out
 
-Result
+<h1>Experiments</h1>
 
 Model                                                                                                           | POS  | NER | Chunk
 --------------------------------------------------------------------------------------------------------------- | :---: | :---: | :-------:
