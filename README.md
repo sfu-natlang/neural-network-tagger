@@ -40,7 +40,7 @@ GLM | 97.18 | 85.38 | -
 FeedForword Model (spelling features) | 97.31 | - | -
 FeedForword (BPE) | 96.64 | - | -
 Bi-LSTM-CRF (word feature only) | 95.88 | 82.00 | -
-Bi-LSTM-CRF (Character Embedding) | 97.37(*) | - | -
+Bi-LSTM-CRF (Character Embedding) | 97.40(*) | - | -
 Bi_LSTM-CRF (spelling feature) | 96.98 | - | -
 
  
