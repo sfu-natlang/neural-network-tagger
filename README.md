@@ -35,7 +35,7 @@ NER Eval: perl conlleval.pl < ner_out
 
 Model                                                                                                           | POS  | NER | Chunk
 --------------------------------------------------------------------------------------------------------------- | :---: | :---: | :-------:
-SyntaxNet Greedy Model (12 CPUs)                                              | 97.20 (97.44 reported) |  - | -
+SyntaxNet Greedy Model                                             | 97.20 (97.44 reported) |  - | -
 GLM | 97.18 | 85.38 | -
 FeedForword Model (spelling features) | 97.31 | - | -
 FeedForword (BPE) | 96.64 | - | -
