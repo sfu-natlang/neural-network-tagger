@@ -106,12 +106,12 @@ class LSTM_CRF_Model(object):
 
     # Needed only if Bidirectional LSTM is used for token level
     with tf.variable_scope("feedforward_after_lstm") as vs:
-      W = tf.get_variable(
+      W1 = tf.get_variable(
         "W",
         shape=[2 * parameters['token_lstm_hidden_state_dimension'], parameters['token_lstm_hidden_state_dimension']],
         initializer=initializer)
-      b = tf.Variable(tf.constant(0.0, shape=[parameters['token_lstm_hidden_state_dimension']]), name="bias")
-      outputs = tf.nn.xw_plus_b(token_lstm_output, W, b, name="output_before_tanh")
+      b1 = tf.Variable(tf.constant(0.0, shape=[parameters['token_lstm_hidden_state_dimension']]), name="bias")
+      outputs = tf.nn.xw_plus_b(token_lstm_output, W1, b1, name="output_before_tanh")
       outputs = tf.nn.tanh(outputs, name="output_after_tanh")
       outputs = tf.reshape(outputs, [-1, parameters['token_lstm_hidden_state_dimension']])
 
@@ -133,12 +133,12 @@ class LSTM_CRF_Model(object):
       suffix_embedding = tf.reshape(suffix_embedding, [-1, 16])
       outputs = tf.concat([outputs, prefix_embedding, suffix_embedding], axis=1, name='token_affix_output')
       '''
-      W = tf.get_variable(
+      W2 = tf.get_variable(
         "W",
         shape=[parameters['token_lstm_hidden_state_dimension'], dataset.number_of_classes],
         initializer=initializer)
-      b = tf.Variable(tf.constant(0.0, shape=[dataset.number_of_classes]), name="bias")
-      scores = tf.nn.xw_plus_b(outputs, W, b, name="scores")
+      b2 = tf.Variable(tf.constant(0.0, shape=[dataset.number_of_classes]), name="bias")
+      scores = tf.nn.xw_plus_b(outputs, W2, b2, name="scores")
       self.unary_scores = tf.reshape(scores, [parameters['batch_size'], -1, dataset.number_of_classes])
       self.predictions = tf.argmax(self.unary_scores, 2, name="predictions")
 

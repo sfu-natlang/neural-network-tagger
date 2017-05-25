@@ -87,8 +87,7 @@ class EntityLSTM(object):
             self.token_embedding_weights = tf.get_variable(
                 "token_embedding_weights",
                 shape=[dataset.vocabulary_size, parameters['token_embedding_dimension']],
-                initializer=initializer,
-                trainable=not parameters['freeze_token_embeddings'])
+                initializer=initializer)
             embedded_tokens = tf.nn.embedding_lookup(self.token_embedding_weights, self.input_token_indices)
 
         # Concatenate character LSTM outputs and token embeddings
@@ -115,24 +114,23 @@ class EntityLSTM(object):
             token_lstm_output_squeezed = tf.squeeze(token_lstm_output, axis=0)
             self.token_lstm_variables = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=vs.name)
 
-        # Needed only if Bidirectional LSTM is used for token level
         with tf.variable_scope("feedforward_after_lstm") as vs:
-            W = tf.get_variable(
+            W1 = tf.get_variable(
                 "W",
                 shape=[2 * parameters['token_lstm_hidden_state_dimension'], parameters['token_lstm_hidden_state_dimension']],
                 initializer=initializer)
-            b = tf.Variable(tf.constant(0.0, shape=[parameters['token_lstm_hidden_state_dimension']]), name="bias")
-            outputs = tf.nn.xw_plus_b(token_lstm_output_squeezed, W, b, name="output_before_tanh")
+            b1 = tf.Variable(tf.constant(0.0, shape=[parameters['token_lstm_hidden_state_dimension']]), name="bias")
+            outputs = tf.nn.xw_plus_b(token_lstm_output_squeezed, W1, b1, name="output_before_tanh")
             outputs = tf.nn.tanh(outputs, name="output_after_tanh")
             self.token_lstm_variables += tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=vs.name)
 
         with tf.variable_scope("feedforward_before_crf") as vs:
-            W = tf.get_variable(
+            W2 = tf.get_variable(
                 "W",
                 shape=[parameters['token_lstm_hidden_state_dimension'], dataset.number_of_classes],
                 initializer=initializer)
-            b = tf.Variable(tf.constant(0.0, shape=[dataset.number_of_classes]), name="bias")
-            scores = tf.nn.xw_plus_b(outputs, W, b, name="scores")
+            b2 = tf.Variable(tf.constant(0.0, shape=[dataset.number_of_classes]), name="bias")
+            scores = tf.nn.xw_plus_b(outputs, W2, b2, name="scores")
             self.unary_scores = scores
             self.predictions = tf.argmax(self.unary_scores, 1, name="predictions")
             self.feedforward_variables = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=vs.name)
@@ -169,25 +167,7 @@ class EntityLSTM(object):
                 log_likelihood, _ = tf.contrib.crf.crf_log_likelihood(
                     unary_scores_expanded, input_label_indices_flat_batch, sequence_lengths, transition_params=self.transition_parameters)
                 self.loss =  tf.reduce_mean(-log_likelihood, name='cross_entropy_mean_loss')
-                self.accuracy = tf.constant(1)
-
                 self.crf_variables = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=vs.name)
-
-        # Do not use CRF layer
-        else:
-            with tf.variable_scope("crf") as vs:
-                self.transition_parameters = tf.get_variable(
-                    "transitions",
-                    shape=[dataset.number_of_classes+2, dataset.number_of_classes+2],
-                    initializer=initializer)
-                self.crf_variables = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=vs.name)
-
-            # Calculate mean cross-entropy loss
-            with tf.variable_scope("loss"):
-                losses = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=self.unary_scores, labels=self.input_label_indices, name='softmax')
-            with tf.variable_scope("accuracy"):
-                correct_predictions = tf.equal(self.predictions, tf.argmax(self.input_label_indices_vector, 1))
-                self.accuracy = tf.reduce_mean(tf.cast(correct_predictions, 'float'), name='accuracy')
 
         self.define_training_procedure(parameters)
         self.summary_op = tf.summary.merge_all()
