@@ -35,7 +35,7 @@ NER Eval: perl conlleval.pl < ner_out
 
 Model                                                                                                           | POS  | NER | Chunk
 --------------------------------------------------------------------------------------------------------------- | :---: | :---: | :-------:
-SyntaxNet Greedy Model                                             | 97.20 (97.44 reported) |  - | -
+SyntaxNet Greedy Model                                             | 97.20 |  - | -
 GLM | 97.18 | 85.38 | -
 FeedForword Model (spelling features) | 97.31 | - | -
 FeedForword (BPE) | 96.64 | - | -
@@ -43,13 +43,13 @@ Bi-LSTM-CRF (word feature only) | 95.88 | 82.00 | -
 Bi-LSTM-CRF (Character Embedding) | 97.08 | - | -
 
 
-<h2> Time (words/sec) <h2>
+<h2> Time (words/sec, with GPU enabled) </h2>
 
 Model                                                                                                           | POS  | NER | Chunk
 --------------------------------------------------------------------------------------------------------------- | :---: | :---: | :-------:
-GLM | ~500/s | - | -
-FeedForword Model (spelling features) | ~9000/s (1)  | - | -
-FeedForword (BPE) | ~3000/s (1) | - | -
+GLM | ~800/s | - | -
+FeedForword Model (spelling features) | ~8000/s (1)  | - | -
+FeedForword (BPE) | ~2500/s (1) | - | -
 Bi-LSTM-CRF (word feature only) | - | - | -
 Bi-LSTM-CRF (Character Embedding) | ~1500/s (2) | - | -
 
