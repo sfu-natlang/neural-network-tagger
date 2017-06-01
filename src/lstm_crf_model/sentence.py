@@ -5,27 +5,8 @@ import logging
 import copy
 import string
 import sklearn.preprocessing
-
-def get_index(word, wordMap):
-  if word in wordMap:
-    return wordMap.index(word)
-  else:
-    return len(wordMap)-1
-
-def _all_digits(s):
-  return all(char.isdigit() for char in s)
-
-def _contains_digits(s):
-  return any(char.isdigit() for char in s)
-
-def _contains_hyphen(s):
-  return any(char == "-" for char in s)
-
-def _contains_upper(s):
-  return any(char.isupper() for char in s)
-
-def _contains_punc(s):
-  return any(char in string.punctuation for char in s)
+import utils
+from pos_feat import Pos_Feat
 
 
 class Sentence():
@@ -47,6 +28,30 @@ class Sentence():
     self.cur_tags = []
     self.output_tags = []
     self.epoch = -1
+    self.state = -1
+
+  def has_next_state(self):
+    index = self.state + 1
+    if index >= len(self.get_word_list()):
+      return False
+    else:
+      return True
+
+  def get_next_state(self):
+    if self.has_next_state():
+      self.state += 1
+      return self.state
+    raise IndexError("Run out of data while calling get_next_sent()")
+
+  def reset_state(self):
+    self.state = -1
+
+  def gen_sent_features(self, word_map, prefix_map, suffix_map):
+    feat_gen = Pos_Feat(self.get_word_list())
+    self.word_features, self.cap_features = feat_gen.gen_word_features(word_map)
+    self.prefix_features = feat_gen.gen_prefix_features(prefix_map)
+    self.suffix_features = feat_gen.gen_suffix_features(suffix_map)
+    self.other_features = feat_gen.gen_other_features()
 
   def gen_id_list(self, word_map, tag_map, char_map):
     self.char_lists = self.gen_char_list(char_map)
@@ -59,7 +64,7 @@ class Sentence():
     for w in word_list:
       char_list = []
       for c in w:
-        char_list.append(get_index(c, char_map))
+        char_list.append(utils.get_index(c, char_map))
       sent_char_lists.append(char_list)
     return sent_char_lists
 
@@ -67,14 +72,14 @@ class Sentence():
     word_ids = []
     word_lengths = []
     for word in self.get_word_list():
-      word_ids.append(get_index(word, word_map))
+      word_ids.append(utils.get_index(word, word_map))
       word_lengths.append(len(word))
     return word_ids, word_lengths
 
   def gen_tagid_list(self, tag_map):
     tag_ids = []
     for tag in self.get_pos_list():
-      tag_ids.append(get_index(tag, tag_map))
+      tag_ids.append(utils.get_index(tag, tag_map))
     return tag_ids
 
   def _gen_word_features(self, wordMap):
@@ -92,14 +97,14 @@ class Sentence():
     sent = self._fetch_column("FORM")
     sent_prefix_features = []
     for i in range(len(sent)):
-      sent_prefix_features.append(get_index(sent[i][:2], pMap))
+      sent_prefix_features.append(utils.get_index(sent[i][:2], pMap))
     return sent_prefix_features
 
   def _gen_suffix_features(self, sMap):
     sent = self._fetch_column("FORM")
     sent_suffix_features = []
     for i in range(len(sent)):
-      sent_suffix_features.append(get_index(sent[i][-2:], sMap))
+      sent_suffix_features.append(utils.get_index(sent[i][-2:], sMap))
     return sent_suffix_features
 
   def _gen_other_features(self):

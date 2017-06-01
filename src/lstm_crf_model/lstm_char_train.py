@@ -23,7 +23,7 @@ def load_token_vector(parameters):
     return token_to_vector
 
 def OutputPath(path):
-  return os.path.join("rnn_models", path)
+  return os.path.join("lstm_char_output", path)
 
 def load_pretrained_token_embeddings(sess, model, dataset, parameters):
   if parameters['token_pretrained_embedding_filepath'] == '':
@@ -76,8 +76,7 @@ def Evaluate(sess, model, dev_data, transition_params_trained, parameters):
       if p == gold_labels[idx]:
         correct_token_num += 1
   dev_data.reset_index()
-  logging.info('token number is %d, accuracy is %.2f%%, time is %.2f', total_token_num, (100.0*correct_token_num/total_token_num), time.time()-start)
-  return correct_token_num
+  return 100.0*correct_token_num/total_token_num
 
 def main():
   logging.set_verbosity(logging.INFO)
@@ -93,14 +92,14 @@ def main():
   parameters['token_lstm_hidden_state_dimension'] = 100
   parameters['use_crf'] = True
   parameters['optimizer'] = 'adam'
-  parameters['learning_rate'] = 0.002
-  parameters['gradient_clipping_value'] = 6.0
+  parameters['learning_rate'] = 0.005
+  parameters['gradient_clipping_value'] = 5.0
   parameters['dropout_rate'] = 0.2
-  parameters['maximum_number_of_epochs'] = 100
+  parameters['maximum_number_of_epochs'] = 10
 
   loading_time = time.time()
   train_data_path = '/cs/natlang-user/vivian/wsj-conll/train.conllu'
-  dev_data_path = '/cs/natlang-user/vivian/wsj-conll/test.conllu'
+  dev_data_path = '/cs/natlang-user/vivian/wsj-conll/dev.conllu'
   logging.info("loading data and precomputing features...")
   train_data = Dataset(train_data_path)
   train_data.load_dataset()
@@ -115,10 +114,11 @@ def main():
     load_pretrained_token_embeddings(sess, model, train_data, parameters)
     epoch_num = 0
     start = time.time()
-    best = 0
+    best = 0.0
     while True:
       step = 0
       epoch_num += 1
+      cost_sum = 0
       while train_data.has_next_sent():
         sent = train_data.get_next_sent()
         step += 1
@@ -132,10 +132,16 @@ def main():
         _, _, loss, transition_params_trained = sess.run(
                     [model.train_op, model.global_step, model.loss, model.transition_parameters],
                     feed_dict)
-        if step % 2000 == 0:
+        cost_sum += loss
+        if step % 1000 == 0:
           current = Evaluate(sess, model, test_data, transition_params_trained, parameters)
-          log_output.write('EPOCH %d, loss is %.2f\n'%(epoch_num, loss))
-          log_output.write('current test accuracy is %.2f%%'%(100.0*current/56684.0))
+          log_output.write('EPOCH %d, loss is %.2f, accuracy is %.2f\n'%(epoch_num, cost_sum/1000, current))
+          cost_sum = 0
+          if current > best:
+            logging.info("saving the model...")
+            model_saver = tf.train.Saver(max_to_keep=parameters['maximum_number_of_epochs'])
+            model_saver.save(sess, OutputPath('char_model_{0:05d}.ckpt'.format(epoch_num)))
+            best = current
       train_data.reset_index()
       if epoch_num >= parameters['maximum_number_of_epochs']: 
         break
@@ -168,7 +174,7 @@ def main():
       for idx, p in enumerate(predictions):
         if p == gold_labels[idx]:
           correct_token_num += 1
-    dev_data.reset_index()
+
     logging.info('token number is %d, accuracy is %.2f%%, time is %.2f', total_token_num, (100.0*correct_token_num/total_token_num), time.time()-start)
 if __name__ == '__main__':
   main()

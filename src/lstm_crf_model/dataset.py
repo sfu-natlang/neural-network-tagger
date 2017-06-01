@@ -10,7 +10,7 @@ import pickle
 
 
 class Dataset(object):
-  """A class for handling data sets."""
+  """A class for handling pos data sets."""
 
   def __init__(self, datapath="train.conllu"):
     self.format_list = ["ID",
@@ -27,10 +27,14 @@ class Dataset(object):
     self.char_map = []
     self.word_map = []
     self.tag_map = []
+    self.prefix_map = []
+    self.suffix_map = []
     self.index = -1
     self.datapath = datapath
 
-  def _parse_dataset(self):
+  def _parse_dataset(self, gen_feature):
+    prefix_count = collections.defaultdict(lambda: 0)
+    suffix_count = collections.defaultdict(lambda: 0)
     word_count = collections.defaultdict(lambda: 0)
     tag_count = collections.defaultdict(lambda: 0)
     char_count = collections.defaultdict(lambda: 0)
@@ -49,8 +53,14 @@ class Dataset(object):
         tag = column_list["PPOS"][-1]
         word_count[word] += 1
         tag_count[tag] += 1
-        for char in word:
-          char_count[char] += 1
+        if gen_feature:
+          prefix_count[word[2:]] += 1
+          suffix_count[word[:-2]] += 1
+          prefix_count[word[3:]] += 1
+          suffix_count[word[:-3]] += 1
+        else:
+          for char in word:
+            char_count[char] += 1
       else:
         if column_list[self.format_list[0]] != []:
           sentence_list.append(Sentence(column_list, self.format_list))
@@ -58,52 +68,74 @@ class Dataset(object):
         for field in self.format_list:
           column_list[field] = []
 
-    return word_count, tag_count, char_count, sentence_list
+    return prefix_count, suffix_count, word_count, tag_count, char_count, sentence_list
 
-  def load_dataset(self, word_map=None, tag_map=None, char_map=None):
+  def load_dataset(self, word_map=None, tag_map=None, char_map=None, prefix_map=None, suffix_map=None, gen_feature=False):
     '''
     dataset_filepaths : dictionary with keys 'train', 'valid', 'test', 'deploy'
     '''
     start_time = time.time()
-    if char_map is None:
+    if word_map is None:
       self.tokens_mapped_to_unk = []
       self.UNK = 'UNK'
-      word_count, tag_count, char_count, self.sentence_list = self._parse_dataset()
+      prefix_count, suffix_count, word_count, tag_count, char_count, self.sentence_list = self._parse_dataset(gen_feature)
 
       word_count = utils.order_dictionary(word_count, 'value_key', reverse = True)
       tag_count = utils.order_dictionary(tag_count, 'key', reverse = False)
       char_count = utils.order_dictionary(char_count, 'value', reverse = True)
+      prefix_count = utils.order_dictionary(prefix_count, 'value_key', reverse = True)
+      suffix_count = utils.order_dictionary(suffix_count, 'value_key', reverse = True)
+      if gen_feature:
+        for pre, count in prefix_count.items():
+          self.prefix_map.append(pre)
+        self.prefix_map.append(self.UNK)
+        pickle.dump(self.word_map, open("prefix_map", 'wb'))
 
+        for suf, count in suffix_count.items():
+          self.suffix_map.append(suf)
+        self.suffix_map.append(self.UNK)
+        pickle.dump(self.word_map, open("suffix_map", 'wb'))
+      else:
+        for char, count in char_count.items():
+          self.char_map.append(char)
+        self.char_map.append(self.UNK)
+        pickle.dump(self.char_map, open("char_map", 'wb'))
+
+      #self.word_map.append("-padding-")
       for word, count in word_count.items():
         self.word_map.append(word)
       self.word_map.append(self.UNK)
       pickle.dump(self.word_map, open("word_map", 'wb'))
-      self.word_size = len(self.word_map)
+      #self.tag_map.append("-padding-")
       for tag, count in tag_count.items():
         self.tag_map.append(tag)
       pickle.dump(self.tag_map, open("tag_map", 'wb'))
-      self.tag_size = len(self.tag_map)
       self.char_map.append("-padding-")
-      for char, count in char_count.items():
-        self.char_map.append(char)
-      self.char_map.append(self.UNK)
-      pickle.dump(self.char_map, open("char_map", 'wb'))
-      self.char_size = len(self.char_map)
+
     else:
       self.word_map = word_map
       self.tag_map = tag_map
       self.char_map = char_map
       self.tag_map = tag_map
       self.char_map = char_map
-      self.word_size = len(self.word_map)
-      self.tag_size = len(self.tag_map)
-      self.char_size = len(self.char_map)
-      word_count, tag_count, char_count, self.sentence_list = self._parse_dataset()
-    for sent in self.sentence_list:
-      sent.gen_id_list(self.word_map, self.tag_map, self.char_map)
-      self.number_of_classes = len(self.tag_map)
-      self.vocabulary_size = len(self.word_map)
-      self.alphabet_size = len(self.char_map)
+      self.prefix_map = prefix_map
+      self.suffix_map = suffix_map
+      _,_,_,_,_,self.sentence_list = self._parse_dataset(gen_feature)
+
+    if gen_feature:
+      for sent in self.sentence_list:
+        sent.gen_id_list(self.word_map, self.tag_map, self.char_map)
+        sent.gen_sent_features(self.word_map, self.prefix_map, self.suffix_map)
+      self.prefix_size = len(self.prefix_map)
+      self.suffix_size = len(self.suffix_map)
+    else:
+      for sent in self.sentence_list:
+        sent.gen_id_list(self.word_map, self.tag_map, self.char_map)
+
+    self.number_of_classes = len(self.tag_map)
+    self.vocabulary_size = len(self.word_map)
+    self.alphabet_size = len(self.char_map)
+
 
     elapsed_time = time.time() - start_time
     print('done ({0:.2f} seconds)'.format(elapsed_time))
@@ -128,7 +160,7 @@ class Dataset(object):
     self.index = -1
 
 if __name__ == '__main__':
-  data_path = "train.conllu"
+  data_path = "test.conllu"
   ds = Dataset(data_path)
   ds.load_dataset()
   print ds.get_sent_num()
@@ -136,14 +168,5 @@ if __name__ == '__main__':
   print len(ds.tag_map)
   print len(ds.char_map)
 
-  data_path2 = "test.conllu"
-  test_data = Dataset(data_path2)
-  test_data.load_dataset(ds.word_map, ds.tag_map, ds.char_map)
-  while test_data.has_next_sent():
-    sent = test_data.get_next_sent()
-    print sent.get_word_list(), sent.word_ids
-    print sent.tag_ids
-    print sent.char_lists
-    break
-  print test_data.get_sent_num()
+  word_map = pickle.load(open(word_map, rb))
 
