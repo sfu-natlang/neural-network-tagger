@@ -1,0 +1,3 @@
+[submodule "glm-parser"]
+	path = glm-parser
+	url = https://github.com/sfu-natlang/glm-parser.git
