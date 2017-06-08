@@ -50,7 +50,7 @@ Model                                                                           
 GLM | ~800/s | - | -
 FeedForword Model (spelling features) | ~8000/s(~400/s) | - | -
 FeedForword (BPE) | - | - | -
-Bi-LSTM-CRF (word feature only) | - | - | -
+Bi-LSTM-CRF (word feature only) | ~2000/s | - | -
 Bi-LSTM-CRF (Character Embedding) | ~1500/s | - | -
 
  
