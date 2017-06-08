@@ -39,8 +39,8 @@ SyntaxNet Greedy Model                                             | 97.20 |  - 
 GLM | 97.18 | 85.38 | -
 FeedForword Model (spelling features) | 97.31 | - | -
 FeedForword (BPE) | 96.64 | - | -
-Bi-LSTM-CRF (word feature only) | 95.88 | 82.00 | -
-Bi-LSTM-CRF (Character Embedding) | 97.08 | - | -
+Bi-LSTM-CRF (word feature only) | 95.88 | - | -
+Bi-LSTM-CRF (Character Embedding) | 97.08 | 78.87 | -
 
 
 <h2> Time (words/sec, with GPU enabled) </h2>
