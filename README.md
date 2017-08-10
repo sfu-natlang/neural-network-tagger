@@ -36,19 +36,18 @@ Model                                                                           
 --------------------------------------------------------------------------------------------------------------- | :---: | :---: | :-------:
 SyntaxNet Greedy Model                                             | 97.20 |  - | -
 GLM | 97.18 | 85.38 | 93.56
-FeedForword Model (spelling features) | 97.31 | 78.45 | -
-FeedForword (BPE) | 96.64 | - | -
-Bi-LSTM-CRF (word feature only) | 95.88 | 78.66 | -
-Bi-LSTM-CRF (Character Embedding) | 97.08 | 78.87 | -
+FeedForword (word) | 95.89 | - | -
+FeedForword Model (history features) | 97.31 | -| -
+Bi-LSTM (word) | 95.88 | 78.66 | -
+Bi-LSTM (Character Embedding) | 97.08 | 78.87 | -
+Bi-LSTM-CRF (Character Embedding) | 97.34 | - | -
 
 
-<h2> Time (words/sec, with GPU enabled) </h2>
+<h2> Decoding Time (words/sec, with GPU enabled) </h2>
 
 Model                                                                                                           | POS  | NER | Chunk
 --------------------------------------------------------------------------------------------------------------- | :---: | :---: | :-------:
-GLM | ~800/s | - | -
 FeedForword Model (spelling features) | ~8000/s(~400/s) | - | -
-FeedForword (BPE) | - | - | -
 Bi-LSTM-CRF (word feature only) | ~2000/s | - | -
 Bi-LSTM-CRF (Character Embedding) | ~1500/s | - | -
 
