@@ -21,15 +21,14 @@ Training: python tagger_trainer.py
 
 Evaluating: python tagger_eval.py
 
-<h2>Bi-LSTM-CRF Model</h2>
+<h2>BiLSTM-CRF Model</h2>
 
-cd PATH_TO_TAGGER/src/lstm_crf_model
+Reference: https://github.com/guillaumegenthial/sequence_tagging
 
-POS Training: python lstm_char_train.py
+<h2>Mention2Vec with FF/BiLSTMs</h2>
 
-NER Training: python ner_train.py
-
-NER Eval: perl conlleval.pl < ner_out
+python build_data.py
+python main_ff.py/main.py
 
 <h2>Experiments</h2>
 
