@@ -34,10 +34,8 @@ python main_ff.py/main.py
 
 Model                                                                                                           | POS  | NER | Chunk
 --------------------------------------------------------------------------------------------------------------- | :---: | :---: | :-------:
-SyntaxNet Greedy Model                                             | 97.20 |  - | -
-GLM | 97.18 | 85.38 | 93.56
-FeedForword (word) | 95.89 | - | -
-FeedForword Model (history features) | 97.31 | -| -
+Feedforword (word) | 95.89 | - | -
+Feedforword (history and spelling features) | 97.31 | -| -
 Bi-LSTM (word) | 95.88 | 78.66 | -
 Bi-LSTM (Character Embedding) | 97.08 | 78.87 | -
 Bi-LSTM-CRF (Character Embedding) | 97.34 | - | -
@@ -47,7 +45,8 @@ Bi-LSTM-CRF (Character Embedding) | 97.34 | - | -
 
 Model                                                                                                           | POS  | NER | Chunk
 --------------------------------------------------------------------------------------------------------------- | :---: | :---: | :-------:
-FeedForword Model (spelling features) | ~8000/s(~400/s) | - | -
+Feedforward Model(word feature only) | 11000/s | - | -
+Feedforword Model (history spelling feature) | ~8000/s | - | -
 Bi-LSTM-CRF (word feature only) | ~2000/s | - | -
 Bi-LSTM-CRF (Character Embedding) | ~1500/s | - | -
 
