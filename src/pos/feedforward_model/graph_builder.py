@@ -329,7 +329,8 @@ class GreedyTagger(object):
                              softmax_weight,
                              softmax_bias,
                              name='logits')
-    return {'logits': logits}
+    predictions = tf.argmax(logits, 1, name="predictions")
+    return {'logits': logits, 'predictions':predictions}
 
   def _AddCostFunction(self, batch_size, gold_actions, logits):
     """Cross entropy plus L2 loss on weights and biases of the hidden layers."""
