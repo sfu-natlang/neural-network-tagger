@@ -53,6 +53,6 @@ class Config():
     char_hidden_size = 50
     
     # NOTE: if both chars and crf, only 1.6x slower on GPU
-    crf = True # if crf, training is 1.7x slower on CPU
+    crf = False # if crf, training is 1.7x slower on CPU
     chars = True # if char embedding, training is 3.5x slower on CPU
 

@@ -140,19 +140,14 @@ class NERModel(object):
         """
         Adds logits to self
         """
-        with tf.variable_scope("ff"):
-            if self.config.chars:
-                input_size = 8*self.config.dim+2*self.config.dim_char
-            else:
-                input_size = 8*self.config.dim
-            weights = tf.get_variable("W", shape=[input_size, 2*self.config.hidden_size], 
-                dtype=tf.float32, initializer=tf.contrib.layers.xavier_initializer())
-            bias = tf.get_variable("b", shape=[2*self.config.hidden_size], dtype=tf.float32, 
-                initializer=tf.zeros_initializer())
-            last_layer = tf.nn.relu_layer(self.word_embeddings,
-                                    weights,
-                                    bias)
-            output = tf.reshape(last_layer, shape=[self.config.batch_size,-1,2*self.config.hidden_size] )
+        with tf.variable_scope("bi-lstm"):
+            cell_fw = tf.contrib.rnn.LSTMCell(self.config.hidden_size)
+            cell_bw = tf.contrib.rnn.LSTMCell(self.config.hidden_size)
+            (output_fw, output_bw), _ = tf.nn.bidirectional_dynamic_rnn(cell_fw, 
+                cell_bw, self.word_embeddings, sequence_length=self.sequence_lengths, 
+                dtype=tf.float32)
+            output = tf.concat([output_fw, output_bw], axis=-1)
+            output = tf.nn.dropout(output, self.dropout)
 
         with tf.variable_scope("proj"):
             W = tf.get_variable("W", shape=[2*self.config.hidden_size, self.ntags], 
