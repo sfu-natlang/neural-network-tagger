@@ -52,15 +52,13 @@ class BPE(object):
         output_tags = []
         for index, word in enumerate(sentence):
             new_word = encode(word, self.bpe_codes)
-
-            for item in new_word[:-1]:
-                output.append(item + self.separator)
-                if tags is not None:
-                    output_tags.append(tags[index])
-            output.append(new_word[-1])
+            output.append(new_word[0])
             if tags is not None:
-                output_tags.append(tags[index])
-
+                output_tags.append("B-"+tags[index])
+            for item in new_word[1:]:
+                output.append(item)
+                if tags is not None:
+                    output_tags.append("I-"+tags[index])
         return output, output_tags
 
 def create_parser():
