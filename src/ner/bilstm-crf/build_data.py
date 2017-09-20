@@ -22,7 +22,7 @@ def build_data(config):
     train = CoNLLDataset(config.train_filename, processing_word)
 
     # Build Word and Tag vocab
-    vocab_words, vocab_tags, vocab_prefix, vocab_suffix = get_vocabs([train, dev, test])
+    vocab_words, vocab_tags = get_vocabs([train, dev, test])
     vocab_glove = get_glove_vocab(config.glove_filename)
 
     vocab = vocab_words & vocab_glove
