@@ -30,12 +30,13 @@ def Evaluate(sess, model, dataset, transition_params_trained, parameters, epoch_
       predictions, _ = tf.contrib.crf.viterbi_decode(unary_scores, transition_params_trained)
       predictions = predictions[1:-1]
     gold_labels = sent.ner_ids
-    words = sent.get_word_list()
-    pos = sent.get_pos_list()
+    words = sent.word_ids
     word_count += len(words)
     accs += [a==b for (a, b) in zip(gold_labels, predictions)]
     lab_chunks = set(utils.get_chunks(gold_labels, dataset.ner_map))
     lab_pred_chunks = set(utils.get_chunks(predictions, dataset.ner_map))
+    #logging.info(sent.ner_ids)
+    #logging.info(predictions)
     correct_preds += len(lab_chunks & lab_pred_chunks)
     total_preds += len(lab_pred_chunks)
     total_correct += len(lab_chunks)
@@ -47,7 +48,7 @@ def Evaluate(sess, model, dataset, transition_params_trained, parameters, epoch_
   test_time = time.time() - start
   dataset.reset_index('test')
   logging.info("epoch: %d, f1 score: %.2f", epoch_num, f1*100.0)
-  logging.info(word_count)
+
   return test_time
 
 
@@ -58,19 +59,19 @@ def main():
   if not gfile.IsDirectory(OutputPath('')):
     gfile.MakeDirs(OutputPath(''))
   parameters = {}
-  parameters['use_crf'] = False
+  parameters['use_crf'] = True
   parameters['use_character_lstm'] = True
   parameters['character_embedding_dimension'] = 25
   parameters['token_embedding_dimension'] = 100
-  #parameters['token_pretrained_embedding_filepath'] = '/cs/natlang-user/vivian/NeuroNER-master/data/word_vectors/glove.6B.100d.txt'
-  parameters['token_pretrained_embedding_filepath'] = ''
+  parameters['token_pretrained_embedding_filepath'] = '/cs/natlang-user/vivian/NeuroNER/data/word_vectors/glove.6B.100d.txt'
+  #parameters['token_pretrained_embedding_filepath'] = ''
   parameters['character_lstm_hidden_state_dimension'] = 50
   parameters['token_lstm_hidden_state_dimension'] = 100
   parameters['optimizer'] = 'sgd'
   parameters['learning_rate'] = 0.005
   parameters['gradient_clipping_value'] = 0
   parameters['dropout_rate'] = 0.5
-  parameters['maximum_number_of_epochs'] = 5
+  parameters['maximum_number_of_epochs'] = 50
   parameters['freeze_token_embeddings'] = False
   
   loading_time = time.time()
