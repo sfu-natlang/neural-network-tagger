@@ -33,11 +33,11 @@ def main(config):
     model.build()
 
     # train, evaluate and interact
-    #model.train(train, dev, vocab_tags)
+    model.train(train, dev, vocab_tags)
     #start = time.time()
-    #model.evaluate(test, vocab_tags)
+    model.evaluate(test, vocab_tags)
     #print time.time()-start
-    model.interactive_shell(vocab_tags, processing_word)
+    #model.interactive_shell(vocab_tags, processing_word)
 
 
 if __name__ == "__main__":
