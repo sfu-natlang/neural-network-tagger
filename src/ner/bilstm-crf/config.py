@@ -23,7 +23,7 @@ class Config():
     glove_filename = "/cs/natlang-user/vivian/NeuroNER/data/word_vectors/glove.6B.100d.txt"
     
     # trimmed embeddings (created from glove_filename with build_data.py)
-    trimmed_filename = "data/glove.6B.{}d.trimmed.npz".format(dim)
+    trimmed_filename = "lstm_ner_models/glove.6B.{}d.trimmed.npz".format(dim)
 
     # dataset
     dev_filename = "/cs/natlang-user/vivian/engonto.train"
