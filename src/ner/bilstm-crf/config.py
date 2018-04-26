@@ -13,7 +13,7 @@ class Config():
         
 
     # general config
-    output_path = "results/crf/"
+    output_path = "lstm_ner_models"
     model_output = output_path + "model.weights/"
     log_path = output_path + "log.txt"
 
@@ -26,15 +26,15 @@ class Config():
     trimmed_filename = "data/glove.6B.{}d.trimmed.npz".format(dim)
 
     # dataset
-    dev_filename = "/cs/natlang-user/vivian/engonto.testa"
-    test_filename = "/cs/natlang-user/vivian/engonto.testb"
-    train_filename = "/cs/natlang-user/vivian/engonto.train"
-    max_iter = None # if not None, max number of examples
+    dev_filename = "/cs/natlang-user/vivian/engonto.train"
+    test_filename = "/cs/natlang-user/vivian/engonto.test"
+    train_filename = "/cs/natlang-user/vivian/engonto.valid"
+    max_iter = None
 
     # vocab (created from dataset with build_data.py)
-    words_filename = "data/words.txt"
-    tags_filename = "data/tags.txt"
-    chars_filename = "data/chars.txt"
+    words_filename = "lstm_ner_models/words.txt"
+    tags_filename = "lstm_ner_models/tags.txt"
+    chars_filename = "lstm_ner_models/chars.txt"
     
     # training
     train_embeddings = True
