@@ -13,7 +13,7 @@ class Config():
         
 
     # general config
-    output_path = "lstm_ner_models"
+    output_path = "lstm_ner_models/crf/"
     model_output = output_path + "model.weights/"
     log_path = output_path + "log.txt"
 
