@@ -1,3 +1,5 @@
 1. load tensorflow module
 2. run "python build_data.py" to generate data
 3. run "python main.py" to generate models 
+
+Reference: https://github.com/guillaumegenthial/sequence_tagging
